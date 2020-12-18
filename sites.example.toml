@@ -2,18 +2,20 @@ interval = 5
 
 parallel_groups = [
     { name = "amazon", steps = [
-        { Navigate = "https://www.amazon.com/AMD-Ryzen-5900X-24-Thread-Processor/dp/B08164VTWH/ref=cm_cr_arp_d_product_top" },
-        #{ Navigate = "https://www.amazon.com/dp/B07MJQJX6T" },
+        { Navigate = "https://www.amazon.com/AMD-Ryzen-5900X-24-Thread-Processor/dp/B08164VTWH" },
+        #{ Navigate = "https://www.amazon.com/AMD-Ryzen-3900XT-24-Threads-Processor/dp/B089WD454D" },
         #{ Find = { name="price_check", selector="#price_inside_buybox", action={Compare={Equal="$13.99"}} }},
         { Find = { name="buy_now", selector="#buy-now-button", action= "Click" }},
-        { Find = { name="no_thanks", selector="#siNoCoverage-announce", optional_group="opt", action= "Click" }},
-        { Find = { name="username", selector="#ap_email", optional_group="login", action={Insert=""} }},
-        { Find = { name="continue", selector="#continue", optional_group="login", action="Click" }},
-        { Find = { name="password", selector="#ap_password", optional_group="login", action={Insert=""} }},
-        { Find = { name="signin", selector="#signInSubmit", optional_group="login", action= "Click"}},
-        { Find = { name="place_order", selector="input[name='placeYourOrder1']", action="Click" }},
+        { Find = { name="no_thanks", selector="#siNoCoverage-announce", action= "Click", wait_max=3000, delay=1000 }},
+        { Find = { name="username", selector="#ap_email", action={Insert=""} }},
+        { Find = { name="continue", selector="#continue", action="Click" }},
+        { Find = { name="password", selector="#ap_password", action={Insert=""} }},
+        { Find = { name="signin", selector="#signInSubmit", action= "Click" }},
+
+        { Find = { name="place_order", selector="input[name='placeYourOrder1']", action="None", wait_max=1000, delay=200 }},
+        
         #{ Find = { name="verify_purchase", selector="", action="None" }},
-        "End",
+        { Log = "success" },
     ]},
     # { name = "newegg", steps = [
     #     #{ Navigate = "https://www.newegg.com/amd-ryzen-9-5900x/p/N82E16819113664?Item=N82E16819113664" },

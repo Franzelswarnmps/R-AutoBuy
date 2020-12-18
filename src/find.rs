@@ -1,7 +1,27 @@
 use crate::config::*;
 use fantoccini::{Client, Locator};
+use std::time::{Instant};
+use std::{thread, time};
 
-pub async fn process_find(client: &mut Client, selector: &String, action: &FindAction) -> Result<(), fantoccini::error::CmdError> {
+pub async fn process_find(client: &mut Client, selector: &String, action: &FindAction, wait_max: &u64, delay: &u64) -> Result<(), fantoccini::error::CmdError> {
+    let start_time = Instant::now();
+
+    loop {
+        if *delay > 0 {
+            thread::sleep(time::Duration::from_millis(*delay));
+        }
+        match process_action(client, selector, action).await {
+            Ok(_) => { return Ok(()) },
+            Err(err) => { 
+                if start_time.elapsed().as_millis() as u64 >= *wait_max {
+                    return Result::Err(err);
+                }
+            },
+        }
+    }
+}
+
+pub async fn process_action(client: &mut Client, selector: &String, action: &FindAction) -> Result<(), fantoccini::error::CmdError> {
 
     match action {
         FindAction::Click => {

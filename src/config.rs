@@ -22,19 +22,26 @@ pub enum FindAction {
 #[derive(Debug, Deserialize)]
 pub enum Step {
     Navigate(String),
+    Log(String),
     Find{
         name: String, 
         selector: String, 
+        action: FindAction,
         #[serde(default = "default_optional")]
         optional_group: String, 
-        action: FindAction,
+        #[serde(default = "default_wait")]
+        wait_max: u64,
+        #[serde(default = "default_delay")]
+        delay: u64,
+        #[serde(default = "default_logging")]
+        logging: bool, 
     },
-    End,
 }
 
-fn default_optional() -> String {
-    "".to_string()
-}
+fn default_optional() -> String { "".to_string() }
+fn default_wait() -> u64 { 0 }
+fn default_delay() -> u64 { 0 }
+fn default_logging() -> bool { true }
 
 #[derive(Debug, Deserialize)]
 pub struct ParallelGroup {

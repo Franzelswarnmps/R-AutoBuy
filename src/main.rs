@@ -71,7 +71,7 @@ async fn process_groups(config: Config, client: &mut Client) -> Result<(), fanto
 }
 
 async fn process_steps(group: &ParallelGroup, c: &mut Client) -> Result<(), fantoccini::error::CmdError> {
-    let mut failed_options = HashSet::new(); // (opnary group name, has failed)
+    let mut failed_options = HashSet::new();
 
     for step in &group.steps {
         //println!("starting step {}", step.name);
@@ -79,38 +79,44 @@ async fn process_steps(group: &ParallelGroup, c: &mut Client) -> Result<(), fant
             Step::Navigate(dest) => {
                 c.goto(dest).await?;
             },
-            Step::Find{name, selector, optional_group, action} => {
+            Step::Find{name, selector, action, optional_group, wait_max, delay, logging} => {
                 // if not in optionary group, execute with error
                 // if in non-failed optionary group and fails, add to failed options
                 // if in failed optionary group, skip
                 match failed_options.get(optional_group) {
                     None => {
                         // println!("Step [{}] starting", name);
-                        match process_find(c,selector, action).await {
+                        match process_find(c,selector, action, wait_max, delay).await {
                             Ok(_) => {
-                                println!("Step [{}:{}] success", group.name, name);
+                                log(format!("Step [{}:{}] success", group.name, name),logging);
                             },
                             Err(err) => {
                                 if optional_group != "" {
-                                    println!("Step [{}:{}] option [{}] failed: {}", group.name, name, optional_group, err);
+                                    log(format!("Step [{}:{}] option [{}] failed: {}", group.name, name, optional_group, err),logging);
                                     failed_options.insert(optional_group);
                                 } else {
-                                    println!("Step [{}:{}] failed, restarting: {}", group.name, name, err);
+                                    log(format!("Step [{}:{}] failed, restarting: {}", group.name, name, err),logging);
                                     return Result::Err(err);
                                 }
                             }
                         };
                     },
                     Some(_) => {
-                        println!("Optional step [{}:{}] skipped", group.name, name);
+                        log(format!("Optional step [{}:{}] skipped", group.name, name),logging);
                         continue;
                     }
                 }
             },
-            config::Step::End => {
-                return Ok(());
-            },
+            Step::Log(message) => {
+                println!("{}",message);
+            }
         }
     }
     Ok(())
+}
+
+fn log(message: String, log: &bool) {
+    if *log {
+        println!("{}",message);
+    }
 }
