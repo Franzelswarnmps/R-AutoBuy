@@ -1,11 +1,13 @@
-interval = 5
+restart = 300000 # 5 minutes
 
 parallel_groups = [
     { name = "amazon", steps = [
+        { Wait = 5000 },
         { Navigate = "https://www.amazon.com/AMD-Ryzen-5900X-24-Thread-Processor/dp/B08164VTWH" },
         #{ Navigate = "https://www.amazon.com/AMD-Ryzen-3900XT-24-Threads-Processor/dp/B089WD454D" },
         #{ Find = { name="price_check", selector="#price_inside_buybox", action={Compare={Equal="$13.99"}} }},
-        { Find = { name="buy_now", selector="#buy-now-button", action= "Click" }},
+        { Find = { name="buy_now", selector="#buy-now-button", action= "Click", logging=false }},
+        { Log = "IN STOCK" },
         { Find = { name="no_thanks", selector="#siNoCoverage-announce", action= "Click", wait_max=3000, delay=1000 }},
         { Find = { name="username", selector="#ap_email", action={Insert=""} }},
         { Find = { name="continue", selector="#continue", action="Click" }},

@@ -23,6 +23,7 @@ pub enum FindAction {
 pub enum Step {
     Navigate(String),
     Log(String),
+    Wait(u64),
     Find{
         name: String, 
         selector: String, 
@@ -51,7 +52,7 @@ pub struct ParallelGroup {
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub interval: u64,
+    pub restart: u64,
     pub parallel_groups: Vec<ParallelGroup>,
 }
 

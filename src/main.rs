@@ -1,20 +1,18 @@
 mod config;
 mod find;
+mod browser;
 
 use fantoccini::Client;
-use std::process::Command;
 use std::{thread, time};
 use config::*;
 use find::*;
+use browser::*;
 use std::collections::{HashSet};
-// use serde_json::map::Map;
-// use serde_json::value::Value;
-// use serde_json::json;
-
+use std::time::{Instant};
+use std::error::Error;
 
 #[tokio::main]
 async fn main() {
-    // tasklist /FI "IMAGENAME eq myapp.exe" 2>NUL | find /I /N "myapp.exe">NUL
 
     let config = match load_config("sites.toml") {
         Ok(val) => val,
@@ -24,49 +22,41 @@ async fn main() {
         }
     };
 
-    Command::new(".\\geckodriver.exe").spawn().expect("failed to start geckodriver.exe");
-
-    // let mut capabilities: Map<String,Value> = Map::new();
-    // capabilities.insert("permissions.default.image".to_string(),json!(2));
-    // let mut client = Client::with_capabilities("http://localhost:4444",capabilities).await.expect("failed to connect to WebDriver");
-    let mut client = Client::new("http://localhost:4444").await.expect("failed to connect to WebDriver");
-
-    match process_groups(config, &mut client).await {
-        Ok(_) => {println!("ended OK")},
-        Err(err) => {println!("ended ERR: {}",err)}
-    }
-     match client.close().await {
-        Ok(_) => {},
-        Err(err) => {println!("client could not be closed: {}",err)}
-    }
-
-    Command::new("taskkill")
-    .args(&["/f", "/im", "geckodriver.exe"])
-    .output()
-    .expect("failed to stop geckodriver.exe");
+    match process_groups(&config).await {
+        Ok(_) => {
+            println!("Ended OK");
+        },
+        Err(err) => { 
+            println!("Ended in err {}", err);
+        },
+    };
 }
 
-async fn process_groups(config: Config, client: &mut Client) -> Result<(), fantoccini::error::CmdError> {
+async fn process_groups(config: &Config) -> Result<(), Box<dyn Error>> {
+    let mut start_time = Instant::now();
+    let mut client = open_browser().await?;
 
     loop {
+        if config.restart != 0 && start_time.elapsed().as_millis() as u64 >= config.restart {
+            start_time = Instant::now();
+            close_browser(&mut client).await?;
+            client = open_browser().await?;
+        }
+
+        // client health check 
+        client.refresh().await?;
+
         for group in &config.parallel_groups {
-            match process_steps(group,client).await {
+            match process_steps(group,&mut client).await {
                 Ok(_) => {
                     // one of the groups ran to success, stop
                     println!("Group [{}] success, stopping", group.name);
                     return Ok(());
                 },
-                Err(_) => {},
+                // ignore errors on process steps
+                Err(_) => { },
             };
-
-            // client.new_window(true).await?;
-            // let window = client.windows().await?.last().unwrap().clone();
-
-            // client.close_window().await?;
-            // client.switch_to_window(window).await?;
         }
-
-        thread::sleep(time::Duration::from_secs(config.interval));
     }
 }
 
@@ -80,9 +70,9 @@ async fn process_steps(group: &ParallelGroup, c: &mut Client) -> Result<(), fant
                 c.goto(dest).await?;
             },
             Step::Find{name, selector, action, optional_group, wait_max, delay, logging} => {
-                // if not in optionary group, execute with error
-                // if in non-failed optionary group and fails, add to failed options
-                // if in failed optionary group, skip
+                // if not in optional group, execute with error
+                // if in non-failed optional group and fails, add to failed options
+                // if in failed optional group, skip
                 match failed_options.get(optional_group) {
                     None => {
                         // println!("Step [{}] starting", name);
@@ -109,9 +99,13 @@ async fn process_steps(group: &ParallelGroup, c: &mut Client) -> Result<(), fant
             },
             Step::Log(message) => {
                 println!("{}",message);
-            }
+            },
+            Step::Wait(time) => {
+                thread::sleep(time::Duration::from_millis(*time));
+            },
         }
     }
+    // all steps done
     Ok(())
 }
 
