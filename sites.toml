@@ -1,20 +1,23 @@
 restart = 300000 # 5 minutes
+timeout = 5000
 
 parallel_groups = [
     { name = "amazon", steps = [
         { Wait = 5000 },
         { Navigate = "https://www.amazon.com/AMD-Ryzen-5900X-24-Thread-Processor/dp/B08164VTWH" },
+        "Refresh",
+
         #{ Navigate = "https://www.amazon.com/AMD-Ryzen-3900XT-24-Threads-Processor/dp/B089WD454D" },
         #{ Find = { name="price_check", selector="#price_inside_buybox", action={Compare={Equal="$13.99"}} }},
         { Find = { name="buy_now", selector="#buy-now-button", action= "Click", logging=false }},
         { Log = "IN STOCK" },
         { Find = { name="no_thanks", selector="#siNoCoverage-announce", action= "Click", wait_max=3000, delay=1000 }},
-        { Find = { name="username", selector="#ap_email", action={Insert=""} }},
+        { Find = { name="username", selector="#ap_email", action={Insert="amazon_username"} }},
         { Find = { name="continue", selector="#continue", action="Click" }},
-        { Find = { name="password", selector="#ap_password", action={Insert=""} }},
+        { Find = { name="password", selector="#ap_password", action={Insert="amazon_password"} }},
         { Find = { name="signin", selector="#signInSubmit", action= "Click" }},
 
-        { Find = { name="place_order", selector="input[name='placeYourOrder1']", action="None", wait_max=1000, delay=200 }},
+        { Find = { name="place_order", selector="input[name='placeYourOrder1']", action="Click", wait_max=7000, delay=3000 }},
         
         #{ Find = { name="verify_purchase", selector="", action="None" }},
         { Log = "success" },

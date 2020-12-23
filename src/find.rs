@@ -1,16 +1,16 @@
 use crate::config::*;
-use fantoccini::{Client, Locator};
+use crate::browser::*;
 use std::time::{Instant};
 use std::{thread, time};
 
-pub async fn process_find(client: &mut Client, selector: &String, action: &FindAction, wait_max: &u64, delay: &u64) -> Result<(), fantoccini::error::CmdError> {
+pub async fn process_find(browser: &mut Browser, selector: &String, action: &FindAction, wait_max: &u64, delay: &u64) -> Result<(), BrowserOutcome> {
     let start_time = Instant::now();
 
     loop {
         if *delay > 0 {
             thread::sleep(time::Duration::from_millis(*delay));
         }
-        match process_action(client, selector, action).await {
+        match process_action(browser, selector, action).await {
             Ok(_) => { return Ok(()) },
             Err(err) => { 
                 if start_time.elapsed().as_millis() as u64 >= *wait_max {
@@ -21,38 +21,37 @@ pub async fn process_find(client: &mut Client, selector: &String, action: &FindA
     }
 }
 
-pub async fn process_action(client: &mut Client, selector: &String, action: &FindAction) -> Result<(), fantoccini::error::CmdError> {
+pub async fn process_action(browser: &mut Browser, selector: &String, action: &FindAction) -> Result<(), BrowserOutcome> {
 
     match action {
         FindAction::Click => {
-            client.find(Locator::Css(&selector)).await?.click().await?;
+            browser.click(selector).await?
         }
-        FindAction::Insert(value) => match client.form(Locator::Css("html")).await {
-            Ok(mut val) => {
-                val.set(Locator::Css(&selector), value).await?;
-            },
-            Err(err) => {
-                return Err(err);
-            }
+        FindAction::Insert(value) => {
+            browser.insert(selector, value).await?
         },
         FindAction::Compare(comparator) => {
             match comparator {
                 Compare::Equal(value) => {
-                    let found_value = &client.find(Locator::Css(&selector)).await?.text().await?;
-                    match found_value == value {
+                    let found_value = browser.text(selector).await?;
+                    match found_value == *value {
                         true => {
                             return Ok(());
                         },
                         false => {
                             let failed_comparison = format!("{} != {}", found_value, value);
-                            return Err(fantoccini::error::CmdError::InvalidArgument("Comparison failed".to_string(),failed_comparison));
+                            return Err(
+                                BrowserOutcome::Unexpected(
+                                    fantoccini::error::CmdError::InvalidArgument("Comparison failed".to_string(),failed_comparison)
+                                )
+                            );
                         }
                     }
                 }
             }
         }
         FindAction::None => {
-            client.find(Locator::Css(&selector)).await?;
+            browser.find(selector).await?;
         }
     }
 

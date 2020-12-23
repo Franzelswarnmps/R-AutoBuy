@@ -1,6 +1,8 @@
 use serde_derive::Deserialize;
 use std::error::Error;
 use std::fs;
+use std::collections::{HashMap};
+
 
 #[derive(Debug, Deserialize)]
 pub enum Compare {
@@ -24,6 +26,7 @@ pub enum Step {
     Navigate(String),
     Log(String),
     Wait(u64),
+    Refresh,
     Find{
         name: String, 
         selector: String, 
@@ -53,7 +56,13 @@ pub struct ParallelGroup {
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub restart: u64,
+    pub timeout: u64,
     pub parallel_groups: Vec<ParallelGroup>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Secrets {
+    pub pairs: HashMap<String, String>,
 }
 
 pub fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
@@ -61,5 +70,36 @@ pub fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
     match toml::from_str(&file_string) {
         Ok(val) => Ok(val),
         Err(err) => Err(Box::new(err))
+    }
+}
+
+pub fn load_secrets(path: &str) -> Result<Secrets, Box<dyn Error>> {
+    let file_string = fs::read_to_string(path)?;
+    match toml::from_str(&file_string) {
+        Ok(val) => Ok(val),
+        Err(err) => Err(Box::new(err))
+    }
+}
+
+pub fn populate_secrets(config: &mut Config, secrets: &Secrets) {
+    for group in &mut config.parallel_groups {
+        for step in &mut group.steps {
+            match step {
+               Step::Find{action, ..} => {
+                match action {
+                    FindAction::Insert(val) => {
+                        match secrets.pairs.get(val) {
+                            Some(secret) => {
+                                *val = secret.to_string();
+                            },
+                            None => {},
+                        }
+                    },
+                    _ => {},
+                }
+               },
+                _ => {},
+            }
+        }
     }
 }
