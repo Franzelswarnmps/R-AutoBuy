@@ -3,21 +3,11 @@ use std::error::Error;
 use std::fs;
 use std::collections::{HashMap};
 
-
-#[derive(Debug, Deserialize)]
-pub enum Compare {
-    //Less(String),
-    Equal(String),
-    //Greater(String),
-    //Between{min: String, max: String},
-}
-
 #[derive(Debug, Deserialize)]
 pub enum FindAction {
     //Read,
     Click,
     Insert(String),
-    Compare(Compare),
     None,
 }
 
@@ -48,8 +38,9 @@ fn default_delay() -> u64 { 0 }
 fn default_logging() -> bool { true }
 
 #[derive(Debug, Deserialize)]
-pub struct ParallelGroup {
+pub struct Group {
     pub name: String,
+    pub startup: Vec<Step>,
     pub steps: Vec<Step>,
 }
 
@@ -57,7 +48,7 @@ pub struct ParallelGroup {
 pub struct Config {
     pub restart: u64,
     pub timeout: u64,
-    pub parallel_groups: Vec<ParallelGroup>,
+    pub groups: Vec<Group>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,24 +73,29 @@ pub fn load_secrets(path: &str) -> Result<Secrets, Box<dyn Error>> {
 }
 
 pub fn populate_secrets(config: &mut Config, secrets: &Secrets) {
-    for group in &mut config.parallel_groups {
-        for step in &mut group.steps {
-            match step {
-               Step::Find{action, ..} => {
-                match action {
-                    FindAction::Insert(val) => {
-                        match secrets.pairs.get(val) {
-                            Some(secret) => {
-                                *val = secret.to_string();
-                            },
-                            None => {},
-                        }
-                    },
-                    _ => {},
-                }
-               },
+    for group in &mut config.groups {
+        populate_step_secrets(&mut group.steps, secrets);
+        populate_step_secrets(&mut group.startup, secrets);
+    }
+}
+
+fn populate_step_secrets(steps: &mut Vec<Step>, secrets: &Secrets) {
+    for step in steps {
+        match step {
+            Step::Find{action, ..} => {
+            match action {
+                FindAction::Insert(val) => {
+                    match secrets.pairs.get(val) {
+                        Some(secret) => {
+                            *val = secret.to_string();
+                        },
+                        None => {},
+                    }
+                },
                 _ => {},
             }
+            },
+            _ => {},
         }
     }
 }

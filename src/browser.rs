@@ -5,11 +5,14 @@ use tokio::time::timeout;
 use std::time::Duration;
 use fantoccini::{Client, Locator};
 
+#[derive(Debug)]
 pub enum BrowserOutcome {
     NoSuchElement(fantoccini::error::CmdError),
     Timeout(tokio::time::Elapsed),
     Unexpected(fantoccini::error::CmdError),
 }
+
+impl Error for BrowserOutcome {}
 
 impl std::fmt::Display for BrowserOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -21,22 +24,45 @@ impl std::fmt::Display for BrowserOutcome {
     }
 }
 
+#[derive(Debug)]
+struct TabDoesNotExist;
+
+impl Error for TabDoesNotExist {}
+
+impl std::fmt::Display for TabDoesNotExist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Browser tab does not exist")
+    }
+}
+
 pub struct Browser {
     pub client: Client,
     pub timeout: Duration,
 }
 
 impl Browser {
-    pub async fn new(timeout: Duration) -> Result<Browser, Box<dyn Error>> {
+    pub async fn new(tabs: usize, timeout: Duration) -> Result<Browser, Box<dyn Error>> {
 
         Browser::close_driver().await.ok();
 
         Command::new(".\\geckodriver.exe").stdout(Stdio::null()).spawn()?;
 
-        Ok(Browser {
+        let mut browser = Browser {
             client: Client::new("http://localhost:4444").await?,
             timeout: timeout,
-        })
+        };
+
+        for _ in 1..tabs {
+            Browser::handle_result(browser.client.new_window(true),browser.timeout).await?;
+        }
+
+        Ok(browser)
+    }
+
+    pub async fn switch_tab(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
+        let handle = Browser::handle_result(self.client.windows(), self.timeout).await?.get(index).ok_or(TabDoesNotExist)?.clone();
+        Browser::handle_result(self.client.switch_to_window(handle), self.timeout).await?;
+        Ok(())
     }
 
     pub async fn restart(&mut self) -> Result<(), Box<dyn Error>> {

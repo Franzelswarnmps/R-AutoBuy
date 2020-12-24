@@ -30,26 +30,6 @@ pub async fn process_action(browser: &mut Browser, selector: &String, action: &F
         FindAction::Insert(value) => {
             browser.insert(selector, value).await?
         },
-        FindAction::Compare(comparator) => {
-            match comparator {
-                Compare::Equal(value) => {
-                    let found_value = browser.text(selector).await?;
-                    match found_value == *value {
-                        true => {
-                            return Ok(());
-                        },
-                        false => {
-                            let failed_comparison = format!("{} != {}", found_value, value);
-                            return Err(
-                                BrowserOutcome::Unexpected(
-                                    fantoccini::error::CmdError::InvalidArgument("Comparison failed".to_string(),failed_comparison)
-                                )
-                            );
-                        }
-                    }
-                }
-            }
-        }
         FindAction::None => {
             browser.find(selector).await?;
         }
