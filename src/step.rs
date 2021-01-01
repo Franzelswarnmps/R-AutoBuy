@@ -3,9 +3,9 @@ use crate::browser::*;
 use std::time::{Instant};
 use std::{thread, time};
 
+// handle waiting/retry here
+// return actual result
 pub async fn process_step(step: &Step, browser: &mut Browser) -> Result<(), BrowserOutcome> {
-    // handle waiting/retry here
-    // return actual result
     let start_time = Instant::now();
 
     loop {

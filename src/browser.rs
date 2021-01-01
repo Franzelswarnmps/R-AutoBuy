@@ -1,8 +1,8 @@
 use std::process::{Command, Stdio};
 use std::error::Error;
+use std::time::Duration;
 
 use tokio::time::timeout;
-use std::time::Duration;
 use fantoccini::{Client, Locator, Element};
 
 #[derive(Debug)]
@@ -48,12 +48,12 @@ impl std::fmt::Display for TabDoesNotExist {
 
 pub struct Browser {
     client: Option<Client>,
-    pub timeout: Duration,
-    pub profile: String,
-    pub screenshot_path: String,
-    pub marionette_port: u64,
-    pub timestamp: u64,
-    pub screenshot_counter: u64,
+    timeout: Duration,
+    profile: String,
+    screenshot_path: String,
+    marionette_port: u64,
+    timestamp: u64,
+    screenshot_counter: u64,
 }
 
 impl Browser {
@@ -62,8 +62,8 @@ impl Browser {
         profile: &String,
         screenshot_path: &String,
         marionette_port: u64) -> Result<Browser, Box<dyn Error>> {
-            
-        Browser::close_driver().await.ok();
+
+        Browser::force_close_driver().await.ok();
         Browser::force_close_firefox().await.ok();
 
         let mut browser = Browser {
@@ -89,11 +89,7 @@ impl Browser {
 
     pub async fn restart(&mut self) -> Result<(), Box<dyn Error>> {        
         self.close().await?;
-        println!("====== BROWSER CLOSED ======");
         self.client = Some(Browser::new_client(&self.profile, self.marionette_port).await?);
-        println!("====== NEW BROWSER MADE ======");
-
-        //std::mem::replace(&mut *self.client, Browser::new_client(&self.profile, self.marionette_port).await?);
         Ok(())
     }
 
@@ -123,21 +119,12 @@ impl Browser {
 
     pub async fn close(&mut self) -> Result<(), Box<dyn Error>> {
         Browser::force_close_firefox().await?;
-
-        println!("====== TRYING TO CLOSE ======");
-
         self.get_client().await?.close().await?;
-
-        println!("====== CLIENT CLOSED ======");
-
-        Browser::close_driver().await?;
-
-        println!("====== DRIVER CLOSED ======");
-
+        Browser::force_close_driver().await?;
         Ok(())
     }
 
-    async fn close_driver() -> Result<(), Box<dyn Error>> {
+    async fn force_close_driver() -> Result<(), Box<dyn Error>> {
         Command::new("taskkill")
         .args(&["/f", "/im", "geckodriver.exe"])
         .output()?;
@@ -220,6 +207,8 @@ impl Browser {
         }
     }
 
+    // this method is not working. The pixels vec size seems unrelated to
+    // the actual size of of the screen, so (width * height == pixels.len()) is false
     pub async fn screenshot(&mut self) -> Result<(), BrowserOutcome> {
         let timeout = self.timeout;
 
@@ -240,9 +229,7 @@ impl Browser {
                     format!("{}, {}",full_path.clone(),err))
                 );
             },
-            _ => {
-                self.screenshot_counter += 1;
-            }
+            _ => {self.screenshot_counter += 1;}
         }
         Ok(())
     }
@@ -256,6 +243,8 @@ impl Browser {
     }
 
     // builder method used due to underlying calls
+    // client is in an option to allow this method to work
+    // without any mem complications
     pub async fn top_window(&mut self) -> Result<(), BrowserOutcome> {
         let client = match std::mem::take(&mut self.client) {
             Some(val) => {val},
@@ -267,12 +256,12 @@ impl Browser {
         Ok(())
     }
 
-    // builder method used due to underlying calls
     pub async fn switch_frame(&mut self,element: Element) -> Result<(), BrowserOutcome> {
         Browser::handle_result(element.enter_frame(), self.timeout).await?;
         Ok(())
     }
 
+    // this method only exists to allow for the method top_window
     async fn get_client(&mut self) -> Result<&mut Client, BrowserOutcome> {
         match &mut self.client {
             Some(val) => {Ok(val)},

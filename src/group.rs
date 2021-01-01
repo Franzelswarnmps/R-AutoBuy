@@ -14,7 +14,6 @@ pub async fn process_group(group: &Group, browser: &mut Browser) -> Result<(), B
         || (step.if_cond != "" && success.contains(&step.if_cond))
         || (step.if_not_cond != "" && failed.contains(&step.if_not_cond)) {
 
-            // handle conditions, optionals, logging
             match process_step(step, browser).await {
                 Err(err) => {
                     log(format!("Step [{}:{}] failed", group.name,step.name ),&step.logging);
@@ -42,28 +41,9 @@ pub async fn process_group(group: &Group, browser: &mut Browser) -> Result<(), B
             }
         }
     }
-    // all steps done
+    
     Ok(())
 }
-
-// Ok(_) => {
-//     log(format!("Step [{}] success", name),logging);
-// },
-// Err(err) => {
-//     match err  {
-//         BrowserOutcome::NoSuchElement(_) => {
-//             if optional_group != "" {
-//                 log(format!("Step [{}] option [{}] failed: {}", name, optional_group, err),logging);
-//                 sequences.inclusive.insert(optional_group.to_string());
-//                 return Ok(());
-//             } else {
-//                 log(format!("Step [{}] failed, restarting: {}", name, err),logging);
-//                 return Err(err);
-//             }
-//         },
-//         unexpected @ _ => { return Err(unexpected) },
-//     }
-// }
 
 pub fn log(message: String, log: &bool) {
     if *log {

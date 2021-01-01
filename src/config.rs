@@ -67,8 +67,5 @@ pub struct Config {
 
 pub fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
     let file_string = fs::read_to_string(path)?;
-    match toml::from_str(&file_string) {
-        Ok(val) => Ok(val),
-        Err(err) => Err(Box::new(err))
-    }
+    Ok(toml::from_str(&file_string)?)
 }

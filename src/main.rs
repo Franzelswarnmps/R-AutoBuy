@@ -41,21 +41,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 },
                 Err(err) => {
                     match err  {
-                        BrowserOutcome::Timeout(timeout) => {
-                            println!("Group [{}] timeout error, restarting: {}", group.name, timeout);
-                            browser.restart().await?;
-                        },
-                        BrowserOutcome::Unexpected(unexpected) => {
+                        unexpected @ BrowserOutcome::Timeout(_) 
+                        | unexpected @ BrowserOutcome::Unexpected(_) 
+                        | unexpected @ BrowserOutcome::ClientLost => {
                             println!("Group [{}] unexpected error, restarting: {}", group.name, unexpected);
-                            browser.restart().await?;
-                        },
-                        BrowserOutcome::ClientLost => {
-                            println!("Group [{}] browser client lost, restarting", group.name);
                             browser.restart().await?;
                         },
                         _ => {
                             // silently continue looping, expected error
-                            // println!("Expected {}", expected);
                         },
                     }
                 },
