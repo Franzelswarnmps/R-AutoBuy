@@ -3,13 +3,20 @@ use std::error::Error;
 
 use tokio::time::timeout;
 use std::time::Duration;
-use fantoccini::{Client, Locator};
+use fantoccini::{Client, Locator, Element};
 
 #[derive(Debug)]
 pub enum BrowserOutcome {
+    // normal errors, continue
     NoSuchElement(fantoccini::error::CmdError),
+    EarlyEnd,
+    Screenshot(String),
+    MatchURLFail(String),
+
+    // try restarting
     Timeout(tokio::time::Elapsed),
     Unexpected(fantoccini::error::CmdError),
+    ClientLost,
 }
 
 impl Error for BrowserOutcome {}
@@ -19,7 +26,11 @@ impl std::fmt::Display for BrowserOutcome {
         match self {
             BrowserOutcome::NoSuchElement(err) => {write!(f, "NoSuchElement error: ({})", err)}
             BrowserOutcome::Timeout(err) => {write!(f, "Timeout error: ({})", err)}
-            BrowserOutcome::Unexpected(err) => {write!(f, "Unexpected error: ({})", err)}
+            BrowserOutcome::Unexpected(err) => {write!(f, "Unexpected error: ({})", err)},
+            BrowserOutcome::EarlyEnd => {write!(f, "Manual end by step")},
+            BrowserOutcome::ClientLost => {write!(f, "Client lost")},
+            BrowserOutcome::Screenshot(name) => {write!(f, "Failed to take screenshot: ({})",name)},
+            BrowserOutcome::MatchURLFail(name) => {write!(f, "Failed to match url: ({})",name)},
         }
     }
 }
@@ -36,70 +47,106 @@ impl std::fmt::Display for TabDoesNotExist {
 }
 
 pub struct Browser {
-    pub client: Client,
+    client: Option<Client>,
     pub timeout: Duration,
+    pub profile: String,
+    pub screenshot_path: String,
+    pub marionette_port: u64,
+    pub timestamp: u64,
+    pub screenshot_counter: u64,
 }
 
 impl Browser {
-    pub async fn new(tabs: usize, timeout: Duration) -> Result<Browser, Box<dyn Error>> {
-
+    pub async fn new(tabs: usize, 
+        timeout: Duration, 
+        profile: &String,
+        screenshot_path: &String,
+        marionette_port: u64) -> Result<Browser, Box<dyn Error>> {
+            
         Browser::close_driver().await.ok();
-
-        Command::new(".\\geckodriver.exe").stdout(Stdio::null()).spawn()?;
+        Browser::force_close_firefox().await.ok();
 
         let mut browser = Browser {
-            client: Client::new("http://localhost:4444").await?,
+            //client: Client::new("http://localhost:4444").await?,
+            client: Some(Browser::new_client(profile,marionette_port).await?),
             timeout: timeout,
+            profile: profile.clone(),
+            screenshot_path: screenshot_path.clone(),
+            marionette_port: marionette_port.clone(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            screenshot_counter: 0,
         };
 
         for _ in 1..tabs {
-            Browser::handle_result(browser.client.new_window(true),browser.timeout).await?;
+            Browser::handle_result(browser.get_client().await?.new_window(true),timeout).await?;
         }
 
         Ok(browser)
     }
 
+    pub async fn restart(&mut self) -> Result<(), Box<dyn Error>> {        
+        self.close().await?;
+        println!("====== BROWSER CLOSED ======");
+        self.client = Some(Browser::new_client(&self.profile, self.marionette_port).await?);
+        println!("====== NEW BROWSER MADE ======");
+
+        //std::mem::replace(&mut *self.client, Browser::new_client(&self.profile, self.marionette_port).await?);
+        Ok(())
+    }
+
+    async fn new_client(profile: &String, marionette_port: u64) -> Result<Client, Box<dyn Error>> {
+        Command::new(".\\geckodriver.exe").
+        args(&["--marionette-port", marionette_port.to_string().as_str()])
+        .stdout(Stdio::null()).spawn()?;
+
+        let args = serde_json::json![{
+            "args": ["--profile", serde_json::value::Value::String(profile.clone())],
+            // "prefs": {
+            //     "marionette.port": serde_json::value::Value::Number(marionette_port.into())
+            // }
+        }];
+        let mut capabilities = webdriver::capabilities::Capabilities::new();
+        capabilities.insert("moz:firefoxOptions".to_string(), args);
+
+        Ok(Client::with_capabilities("http://localhost:4444",capabilities).await?)
+    }
+
     pub async fn switch_tab(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
-        let handle = Browser::handle_result(self.client.windows(), self.timeout).await?.get(index).ok_or(TabDoesNotExist)?.clone();
-        Browser::handle_result(self.client.switch_to_window(handle), self.timeout).await?;
+        let timeout = self.timeout;
+        let handle = Browser::handle_result(self.get_client().await?.windows(), timeout).await?.get(index).ok_or(TabDoesNotExist)?.clone();
+        Browser::handle_result(self.get_client().await?.switch_to_window(handle), timeout).await?;
         Ok(())
     }
 
-    pub async fn restart(&mut self) -> Result<(), Box<dyn Error>> {
-        self.close().await.ok();
+    pub async fn close(&mut self) -> Result<(), Box<dyn Error>> {
+        Browser::force_close_firefox().await?;
 
-        Command::new(".\\geckodriver.exe").stdout(Stdio::null()).spawn()?;
-        self.client = Client::new("http://localhost:4444").await?;
+        println!("====== TRYING TO CLOSE ======");
 
-        Ok(())
-    }
+        self.get_client().await?.close().await?;
 
-    pub async fn close(&mut self) -> Result<(), String> {
-        let mut error_message = "".to_string();
+        println!("====== CLIENT CLOSED ======");
 
-        match self.client.close().await {
-            Ok(_) => {},
-            Err(err) => {
-                error_message = format!("problem closing the client: {}", err);
-            }
-        }
+        Browser::close_driver().await?;
 
-        match Browser::close_driver().await {
-            Ok(_) => {},
-            Err(err) => {
-                error_message = format!("{}, problem ending geckodriver: {}", error_message, err);
-            }
-        }
-    
-        if error_message.len() > 0 {
-            return Result::Err(error_message.to_string())
-        }
+        println!("====== DRIVER CLOSED ======");
+
         Ok(())
     }
 
     async fn close_driver() -> Result<(), Box<dyn Error>> {
         Command::new("taskkill")
         .args(&["/f", "/im", "geckodriver.exe"])
+        .output()?;
+        Ok(())
+    }
+
+    async fn force_close_firefox() -> Result<(), Box<dyn Error>> {
+        Command::new("taskkill")
+        .args(&["/f", "/im", "Firefox.exe"])
         .output()?;
         Ok(())
     }
@@ -132,7 +179,8 @@ impl Browser {
     }
 
     pub async fn find(&mut self, selector: &String) -> Result<fantoccini::Element, BrowserOutcome> {
-        Browser::handle_result(self.client.find(Locator::Css(selector)),self.timeout).await
+        let timeout = self.timeout;
+        Browser::handle_result(self.get_client().await?.find(Locator::Css(selector)),timeout).await
     }
 
     pub async fn click(&mut self, selector: &String) -> Result<(), BrowserOutcome>  {
@@ -143,7 +191,9 @@ impl Browser {
     }
 
     pub async fn insert(&mut self, selector: &String, value: &String) -> Result<(), BrowserOutcome>  {
-        match Browser::handle_result(self.client.form(Locator::Css("html")),self.timeout).await {
+        let timeout = self.timeout;
+
+        match Browser::handle_result(self.get_client().await?.form(Locator::Css("html")),timeout).await {
             Ok(mut val) => {
                 match Browser::handle_result(val.set(Locator::Css(selector), value),self.timeout).await {         
                     Ok(_) => {Ok(())},
@@ -155,20 +205,78 @@ impl Browser {
     }
 
     pub async fn goto(&mut self, dest: &String) -> Result<(), BrowserOutcome>  {
-        match Browser::handle_result(self.client.goto(dest),self.timeout).await {
+        let timeout = self.timeout;
+        match Browser::handle_result(self.get_client().await?.goto(dest),timeout).await {
             Ok(_) => {Ok(())},
             Err(err) => {Err(err)}
         }
     }
 
     pub async fn refresh(&mut self) -> Result<(), BrowserOutcome>  {
-        match Browser::handle_result(self.client.refresh(),self.timeout).await {
+        let timeout = self.timeout;
+        match Browser::handle_result(self.get_client().await?.refresh(),timeout).await {
             Ok(_) => {Ok(())},
             Err(err) => {Err(err)}
         }
     }
 
-    pub async fn text(&mut self, selector: &String) -> Result<String, BrowserOutcome>  {
-        Browser::handle_result(self.find(selector).await?.text(), self.timeout).await
+    pub async fn screenshot(&mut self) -> Result<(), BrowserOutcome> {
+        let timeout = self.timeout;
+
+        let full_path = format!("{}{}-{}.png", self.screenshot_path, self.timestamp, self.screenshot_counter);
+        let (width,height) = Browser::handle_result(self.get_client().await?.get_window_size(),timeout).await?;
+        let pixels = Browser::handle_result(self.get_client().await?.screenshot(),timeout).await?;
+        let image = match image::RgbImage::from_raw(width as u32, height as u32, pixels) {
+            Some(val) => val,
+            None => {
+                return Err(BrowserOutcome::Screenshot(
+                    format!("{}, {}",full_path.clone(),"raw conversion failed")
+                ));
+            },
+        };
+        match image.save(full_path.clone()) {
+            Err(err) => {
+                return Err(BrowserOutcome::Screenshot(
+                    format!("{}, {}",full_path.clone(),err))
+                );
+            },
+            _ => {
+                self.screenshot_counter += 1;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn current_url(&mut self) -> Result<String, BrowserOutcome> {
+        let timeout = self.timeout;
+
+        Ok(Browser::handle_result(
+            self.get_client().await?.current_url(),timeout
+        ).await?.to_string())
+    }
+
+    // builder method used due to underlying calls
+    pub async fn top_window(&mut self) -> Result<(), BrowserOutcome> {
+        let client = match std::mem::take(&mut self.client) {
+            Some(val) => {val},
+            None => { return Err(BrowserOutcome::ClientLost) }
+        };
+
+        self.client = Some(Browser::handle_result(client.enter_parent_frame(), self.timeout).await?);
+
+        Ok(())
+    }
+
+    // builder method used due to underlying calls
+    pub async fn switch_frame(&mut self,element: Element) -> Result<(), BrowserOutcome> {
+        Browser::handle_result(element.enter_frame(), self.timeout).await?;
+        Ok(())
+    }
+
+    async fn get_client(&mut self) -> Result<&mut Client, BrowserOutcome> {
+        match &mut self.client {
+            Some(val) => {Ok(val)},
+            None => { Err(BrowserOutcome::ClientLost) }
+        }
     }
 }

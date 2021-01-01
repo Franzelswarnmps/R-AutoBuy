@@ -1,39 +1,37 @@
-restart = 1800000 # 30 minutes
-timeout = 10000
+profile = "C:\\Users\\Matthew\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\khs64xww.remote"
+screenshot_path = "C:\\Users\\Matthew\\Desktop\\scraper\\screenshots\\"
+marionette_port = 28287
+
+timeout = 20000 # 20 seconds
 
 # each group gets its own window
 # restart closes and re-opens all windows
 groups = [
-    { name = "amazon", startup=[
-        { Navigate = "https://www.amazon.com/gp/sign-in.html" },
-        { Find = { name="username", selector="#ap_email", action={Insert="amazon_username"} }},
-        { Find = { name="continue", selector="#continue", action="Click" }},
-        #{ Find = { name="remember", selector="input[name='rememberMe']", action="Click"}},
-        { Find = { name="password", selector="#ap_password", action={Insert="amazon_password"} }},
-        { Find = { name="signin", selector="#signInSubmit", action= "Click" }},
-    ], steps = [
-        { Wait = 5000 },
-        { Navigate = "https://www.amazon.com/AMD-Ryzen-5900X-24-Thread-Processor/dp/B08164VTWH" },
-        "Refresh",
+    { name = "amazon", steps = [
+        { action = { Navigate = "https://www.amazon.com/AMD-Ryzen-5900X-24-Thread-Processor/dp/B08164VTWH" }, logging=false},
+        #{ action = { Navigate = "https://www.amazon.com/AMD-Ryzen-3900XT-24-Threads-Processor/dp/B089WD454D" }, logging=false},
+        #{ action = { Navigate = "https://www.amazon.com/AMD-Ryzen-3800X-16-Thread-Processor/dp/B07SXMZLPJ/" }, logging=false},
+        #{ action = { Navigate = "https://www.amazon.com/dp/B000YSONMO/" }, logging=false},
+        { action = "Refresh", logging=false },
+        # { action = "Screenshot" },
 
-        #{ Navigate = "https://www.amazon.com/AMD-Ryzen-3900XT-24-Threads-Processor/dp/B089WD454D" },
-        #{ Find = { name="price_check", selector="#price_inside_buybox", action={Compare={Equal="$13.99"}} }},
-        { Find = { name="buy_now", selector="#buy-now-button", action= "Click", logging=false }},
-        { Log = "IN STOCK" },
-        { Find = { name="no_thanks", selector="#siNoCoverage-announce", action= "Click", wait_max=3000, delay=1000 }},
+        { name="buy_now", action = { Find = {selector="#buy-now-button", action= "Click" }}, logging=false, optional=true},
+        { name="delay", action = { Wait = 5000 } , logging=false, if_not_cond="buy_now"},
+        { name="early_end", action = "End", logging=false, if_not_cond="buy_now"},
 
-        { Find = { name="place_order", selector="input[name='placeYourOrder1']", action="Click", wait_max=7000, delay=3000 }},
-        
-        #{ Find = { name="verify_purchase", selector="", action="None" }},
-        { Log = "success" },
+        { name="no_thanks", delay=1500, action = { Find = { selector="#siNoCoverage-announce", action= "Click" }}, optional=true},
+
+        # early stop if sent to cart page
+        { name="cart_early", delay=1000, action = { MatchURL = "amazon.com/gp/cart/"}, optional=true},
+        { name="cart_early_end", action = "End", if_cond="cart_early"},
+
+        { name="place_order_frame", delay=1500, action = { Find = { selector="#turbo-checkout-iframe", action="SwitchFrame" }}, optional=true},
+        { name="place_order_modal", wait_max=3500, delay=1000, action = { Find = { selector="#turbo-checkout-pyo-button", action="Click" }}, if_cond="place_order_frame"},
+
+        { name="place_order_page", delay=2000, action = { Find = { selector="input[name='placeYourOrder1']", action="Click" }}, if_not_cond="place_order_frame"},
+        { name="no_order_page", action = "End", if_not_cond="place_order_page"},
+
+        #{ name="verify_order", wait_max=5000, delay=2000, action = { Find = { selector="div.a-alert-success div#widget-purchaseConfirmationStatus", action="None" }}},
+        { name="verify_order", wait_max=4000, delay=1000, action = { MatchURL = "amazon.com/gp/buy/thankyou/"}},
     ]},
-
-    # { name = "newegg", startup=[
-    #     { Navigate = "https://www.newegg.com/amd-ryzen-9-5900x/p/N82E16819113664" },
-    # ], steps = [
-    #     { Wait = 5000 },
-    #     { Navigate = "https://www.newegg.com/amd-ryzen-9-5900x/p/N82E16819113664" },
-    #     "Refresh",
-    #     { Find = { name="buy_now", selector="#buy-now-button", action= "Click", logging=false }},
-    # ]},
 ]
