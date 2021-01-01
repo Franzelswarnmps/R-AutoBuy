@@ -1,14 +1,16 @@
 # About
-This bot was created to allow for easy automation os common browser tasks.
+This bot was created to allow for easy automation of common browser tasks.
 All configuration of the tool is done inside sites.toml, include all the
 browser steps.
 
 The bot was originally made to automate buying a 5900X off Amazon,
-but it can probably be used for other things easily.
+but it can probably be used for other things.
 
 # Known Issues
 * Entering a frame and clicking a button which causes a page change
 will cause an unrecoverable error.
+
+# Todo
 * Add a config field for geckodriver executable location
 
 # Setup
