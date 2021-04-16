@@ -43,6 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     match err  {
                         unexpected @ BrowserOutcome::Timeout(_) 
                         | unexpected @ BrowserOutcome::Unexpected(_) 
+                        | unexpected @ BrowserOutcome::ReCaptchaIssue(_)
                         | unexpected @ BrowserOutcome::ClientLost => {
                             println!("Group [{}] unexpected error, restarting: {}", group.name, unexpected);
                             browser.restart().await?;

@@ -26,8 +26,12 @@ pub async fn process_step(step: &Step, browser: &mut Browser) -> Result<(), Brow
 pub async fn process_action(step: &Step, browser: &mut Browser) -> Result<(), BrowserOutcome> {
 
     match &step.action {
-        StepAction::Navigate(url) => {
-            browser.goto(url).await?
+        StepAction::Navigate{url, anti_cache} => {
+            let mut final_url = url.clone();
+            if *anti_cache {
+                final_url = format!("{}?{}",final_url,rand::random::<u64>());
+            }
+            browser.goto(&final_url).await?
         },
         StepAction::Wait(time) => {
             thread::sleep(time::Duration::from_millis(*time));
@@ -55,7 +59,7 @@ pub async fn process_action(step: &Step, browser: &mut Browser) -> Result<(), Br
             match action {
                 FindAction::Click => {
                     browser.click(selector).await?
-                }
+                },
                 FindAction::Insert(value) => {
                     browser.insert(selector, value).await?
                 },
@@ -66,6 +70,39 @@ pub async fn process_action(step: &Step, browser: &mut Browser) -> Result<(), Br
                     let element = browser.find(selector).await?;
                     browser.switch_frame(element).await?;
                 }
+            }
+        },
+        StepAction::Special(action) => {
+            match action {
+                SpecialAction::SolveAmazonReCaptcha => {
+                    let image_selector = "form[action='/errors/validateCaptcha'] img".to_string();
+                    let image_attr = "src".to_string();
+
+                    let image_url;
+                    match browser.find_attribute(&image_selector,&image_attr).await? {
+                        Some(val) => {image_url = val},
+                        None => {
+                            return Err(BrowserOutcome::ReCaptchaIssue("Missing src attribute on ReCaptcha img tag".to_string()));
+                        }
+                    }
+
+                    let answer = pyo3::Python::with_gil(|py| -> Result<String,pyo3::PyErr> {
+                        use pyo3::types::*;
+                        let locals = [("captcha", py.import("amazoncaptcha")?)].into_py_dict(py);
+                        let code = format!("captcha.AmazonCaptcha.fromlink('{}').solve()",image_url);
+                        let result: String = py.eval(code.as_str(), None, Some(&locals))?.extract()?;
+                        Ok(result)
+                    }).map_err(|err| {
+                        pyo3::Python::with_gil(|py| err.print_and_set_sys_last_vars(py));
+                        BrowserOutcome::ReCaptchaIssue("Problem with the Python invocation".to_string())
+                    })?;
+
+                    let insert_selector ="#captchacharacters".to_string();
+                    browser.insert(&insert_selector,&answer).await?;
+
+                    let submit_selector = "form[action='/errors/validateCaptcha'] button[type='submit']".to_string();
+                    browser.click(&submit_selector).await?
+                },
             }
         },
     }

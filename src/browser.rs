@@ -17,6 +17,7 @@ pub enum BrowserOutcome {
     Timeout(tokio::time::Elapsed),
     Unexpected(fantoccini::error::CmdError),
     ClientLost,
+    ReCaptchaIssue(String),
 }
 
 impl Error for BrowserOutcome {}
@@ -31,6 +32,7 @@ impl std::fmt::Display for BrowserOutcome {
             BrowserOutcome::ClientLost => {write!(f, "Client lost")},
             BrowserOutcome::Screenshot(name) => {write!(f, "Failed to take screenshot: ({})",name)},
             BrowserOutcome::MatchURLFail(name) => {write!(f, "Failed to match url: ({})",name)},
+            BrowserOutcome::ReCaptchaIssue(issue) => {write!(f, "ReCaptcha issue: ({})",issue)},
         }
     }
 }
@@ -267,5 +269,9 @@ impl Browser {
             Some(val) => {Ok(val)},
             None => { Err(BrowserOutcome::ClientLost) }
         }
+    }
+
+    pub async fn find_attribute(&mut self, selector: &String, attr: &String) -> Result<Option<String>, BrowserOutcome> {
+        Browser::handle_result(self.find(selector).await?.attr(attr), self.timeout).await
     }
 }

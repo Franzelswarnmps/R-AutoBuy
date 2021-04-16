@@ -4,6 +4,7 @@ use std::fs;
 
 fn default_optional() -> bool { false }
 fn default_logging() -> bool { true }
+fn default_anti_cache() -> bool { false }
 fn default_empty_string() -> String { "".into() }
 fn default_wait() -> u64 { 0 }
 fn default_delay() -> u64 { 0 }
@@ -29,7 +30,11 @@ pub struct Step {
 
 #[derive(Debug, Deserialize)]
 pub enum StepAction {
-    Navigate(String),
+    Navigate{
+        url: String,
+        #[serde(default = "default_anti_cache")]
+        anti_cache: bool,
+    },
     Wait(u64),
     MatchURL(String),
     Screenshot,
@@ -40,6 +45,12 @@ pub enum StepAction {
     },
     Refresh,
     End,
+    Special(SpecialAction),
+}
+
+#[derive(Debug, Deserialize)]
+pub enum SpecialAction {
+    SolveAmazonReCaptcha
 }
 
 #[derive(Debug, Deserialize)]
