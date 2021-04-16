@@ -5,7 +5,8 @@ use std::time::Duration;
 use tokio::time::timeout;
 use fantoccini::{Client, Locator, Element};
 
-#[derive(Debug)]
+// crate-wide errors to wrap browser operation results and handle timeouts
+#[derive(Debug, Error)]
 pub enum BrowserOutcome {
     // normal errors, continue
     NoSuchElement(fantoccini::error::CmdError),
@@ -19,8 +20,6 @@ pub enum BrowserOutcome {
     ClientLost,
     ReCaptchaIssue(String),
 }
-
-impl Error for BrowserOutcome {}
 
 impl std::fmt::Display for BrowserOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -37,10 +36,9 @@ impl std::fmt::Display for BrowserOutcome {
     }
 }
 
-#[derive(Debug)]
+// there's an exposed API for switching tabs, this error is for that very specific case
+#[derive(Debug, Error)]
 struct TabDoesNotExist;
-
-impl Error for TabDoesNotExist {}
 
 impl std::fmt::Display for TabDoesNotExist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -49,6 +47,7 @@ impl std::fmt::Display for TabDoesNotExist {
 }
 
 pub struct Browser {
+    // This option wrapping is needed due an API issue in fantoccini::Client::enter_parent_frame
     client: Option<Client>,
     timeout: Duration,
     profile: String,
@@ -102,9 +101,6 @@ impl Browser {
 
         let args = serde_json::json![{
             "args": ["--profile", serde_json::value::Value::String(profile.clone())],
-            // "prefs": {
-            //     "marionette.port": serde_json::value::Value::Number(marionette_port.into())
-            // }
         }];
         let mut capabilities = webdriver::capabilities::Capabilities::new();
         capabilities.insert("moz:firefoxOptions".to_string(), args);
@@ -126,6 +122,8 @@ impl Browser {
         Ok(())
     }
 
+    // Geckodriver sometimes becomes unresponsive after a long runtime
+    // and needs to be restarted
     async fn force_close_driver() -> Result<(), Box<dyn Error>> {
         Command::new("taskkill")
         .args(&["/f", "/im", "geckodriver.exe"])
@@ -133,6 +131,8 @@ impl Browser {
         Ok(())
     }
 
+    // When Geckodriver becomes unresponsive, Firefox needs to be closed so
+    // a new instance of Geckodriver can spawn a fresh Firefox process
     async fn force_close_firefox() -> Result<(), Box<dyn Error>> {
         Command::new("taskkill")
         .args(&["/f", "/im", "Firefox.exe"])
@@ -140,6 +140,8 @@ impl Browser {
         Ok(())
     }
 
+    // used to wrap fantoccini futures and ensure the time does not exceed the timeout period.
+    // without a timeout period, fantoccini can infinitely wait sometimes
     async fn handle_result<T,X>(future: T, time: Duration)
     -> Result<X,BrowserOutcome>
     where T: std::future::Future<Output=std::result::Result<X, fantoccini::error::CmdError>> {
@@ -167,11 +169,13 @@ impl Browser {
         }
     }
 
+    // get element by CSS selector
     pub async fn find(&mut self, selector: &String) -> Result<fantoccini::Element, BrowserOutcome> {
         let timeout = self.timeout;
         Browser::handle_result(self.get_client().await?.find(Locator::Css(selector)),timeout).await
     }
 
+    // click element
     pub async fn click(&mut self, selector: &String) -> Result<(), BrowserOutcome>  {
         match Browser::handle_result(self.find(selector).await?.click(), self.timeout).await {
             Ok(_) => {Ok(())},
@@ -179,6 +183,7 @@ impl Browser {
         }
     }
 
+    // get element by CSS selector and insert a value as a direct child
     pub async fn insert(&mut self, selector: &String, value: &String) -> Result<(), BrowserOutcome>  {
         let timeout = self.timeout;
 
@@ -193,6 +198,7 @@ impl Browser {
         }
     }
 
+    // navigate tab to URL
     pub async fn goto(&mut self, dest: &String) -> Result<(), BrowserOutcome>  {
         let timeout = self.timeout;
         match Browser::handle_result(self.get_client().await?.goto(dest),timeout).await {
@@ -201,6 +207,7 @@ impl Browser {
         }
     }
 
+    // refresh the page
     pub async fn refresh(&mut self) -> Result<(), BrowserOutcome>  {
         let timeout = self.timeout;
         match Browser::handle_result(self.get_client().await?.refresh(),timeout).await {
@@ -209,7 +216,13 @@ impl Browser {
         }
     }
 
-    // this method is not working. The pixels vec size seems unrelated to
+    // find element by selector and attempt to get an attribute value from the selector
+    pub async fn find_attribute(&mut self, selector: &String, attr: &String) -> Result<Option<String>, BrowserOutcome> {
+        Browser::handle_result(self.find(selector).await?.attr(attr), self.timeout).await
+    }
+
+    // used to take a screenshot of the current page
+    // this method is not working currently. The pixels vec size seems unrelated to
     // the actual size of of the screen, so (width * height == pixels.len()) is false
     pub async fn screenshot(&mut self) -> Result<(), BrowserOutcome> {
         let timeout = self.timeout;
@@ -236,6 +249,7 @@ impl Browser {
         Ok(())
     }
 
+    // get the current url
     pub async fn current_url(&mut self) -> Result<String, BrowserOutcome> {
         let timeout = self.timeout;
 
@@ -244,26 +258,10 @@ impl Browser {
         ).await?.to_string())
     }
 
-    // builder method used due to underlying calls
-    // client is in an option to allow this method to work
-    // without any mem complications
-    pub async fn top_window(&mut self) -> Result<(), BrowserOutcome> {
-        let client = match std::mem::take(&mut self.client) {
-            Some(val) => {val},
-            None => { return Err(BrowserOutcome::ClientLost) }
-        };
-
-        self.client = Some(Browser::handle_result(client.enter_parent_frame(), self.timeout).await?);
-
-        Ok(())
-    }
-
-    pub async fn switch_frame(&mut self,element: Element) -> Result<(), BrowserOutcome> {
-        Browser::handle_result(element.enter_frame(), self.timeout).await?;
-        Ok(())
-    }
-
-    // this method only exists to allow for the method top_window
+    // this method is needed because fantoccini:Client:enter_parent_frame()
+    // cannot accept a mutable reference to Client, unlike the rest
+    // of the API, so we take ownership of Client and set the Option
+    // to None temporarily in top_window() so we can use enter_parent_frame()
     async fn get_client(&mut self) -> Result<&mut Client, BrowserOutcome> {
         match &mut self.client {
             Some(val) => {Ok(val)},
@@ -271,7 +269,19 @@ impl Browser {
         }
     }
 
-    pub async fn find_attribute(&mut self, selector: &String, attr: &String) -> Result<Option<String>, BrowserOutcome> {
-        Browser::handle_result(self.find(selector).await?.attr(attr), self.timeout).await
+    // temporarily takes ownership of Client to use fantoccini:Client:enter_parent_frame()
+    pub async fn top_window(&mut self) -> Result<(), BrowserOutcome> {
+        let client = match std::mem::take(&mut self.client) {
+            Some(val) => {val},
+            None => { return Err(BrowserOutcome::ClientLost) }
+        };
+        self.client = Some(Browser::handle_result(client.enter_parent_frame(), self.timeout).await?);
+        Ok(())
+    }
+
+    // change IFRAME using the passed element as the target
+    pub async fn switch_frame(&mut self,element: Element) -> Result<(), BrowserOutcome> {
+        Browser::handle_result(element.enter_frame(), self.timeout).await?;
+        Ok(())
     }
 }

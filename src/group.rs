@@ -3,7 +3,7 @@ use crate::browser::*;
 use crate::step::*;
 use std::collections::{HashSet};
 
-// handle conditions, optionals, logging
+// handle if_not_cond, if_cond, optional, and logging inside sites.toml
 pub async fn process_group(group: &Group, browser: &mut Browser) -> Result<(), BrowserOutcome> {
 
     let mut success: HashSet<String> = HashSet::new();
