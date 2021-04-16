@@ -1,10 +1,10 @@
 # About
 This bot was created to allow for easy automation of common browser tasks.
-All configuration of the tool is done inside sites.toml, include all the
+All configuration of the tool is done inside sites.toml, including all the
 browser steps.
 
-The bot was originally made to automate buying a 5900X off Amazon,
-but it can probably be used for other things. The rest of this readme
+The bot was originally made to automate buying a 5900X off Amazon, which it
+managed to do :). The bot can probably do other things. The rest of this readme
 is aimed at the amazon use-case.
 
 # Requirements
@@ -12,7 +12,7 @@ is aimed at the amazon use-case.
 * Geckodriver executable
 * Rust
 
-# ReCaptcha Requirements
+# Captcha Requirements
 * Python3
 * amazoncaptcha
 
@@ -30,7 +30,7 @@ depending on whether you installed Python3 and amazoncaptcha
 # Known Issues
 * Entering a frame and clicking a button which causes a page change
 will cause an unrecoverable error.
-* Screenshots don't work becaused the response from webdriver has a strange size
+* Screenshots don't work because the response from webdriver has a strange size
 (not equal to width*height of the browser).
 
 # Todo
