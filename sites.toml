@@ -16,7 +16,7 @@ groups = [
         # { action = "Screenshot" },
 
         # check for captcha
-        { name="captcha_check", delay=100, action = { MatchURL = "amazon.com/errors/validateCaptcha"}, optional=true, logging=false},
+        { name="captcha_check", delay=100, action = { MatchUrl = "amazon.com/errors/validateCaptcha"}, optional=true, logging=false},
         { name="captcha_solve", delay=5000, action = { Special = "SolveAmazonReCaptcha"}, if_cond="captcha_check",optional=true},
 
         { name="buy_now", action = { Find = {selector="#buy-now-button", action= "Click" }}, logging=false, optional=true},
@@ -26,7 +26,7 @@ groups = [
         { name="no_thanks", delay=1200, action = { Find = { selector="#siNoCoverage-announce", action= "Click" }}, optional=true},
 
         # early stop if sent to cart page
-        { name="cart_early", delay=200, action = { MatchURL = "amazon.com/gp/cart/"}, optional=true},
+        { name="cart_early", delay=200, action = { MatchUrl = "amazon.com/gp/cart/"}, optional=true},
         { name="cart_early_end", action = "End", if_cond="cart_early"},
 
         { name="place_order_frame", delay=1200, action = { Find = { selector="#turbo-checkout-iframe", action="SwitchFrame" }}, optional=true},
@@ -35,7 +35,7 @@ groups = [
         { name="place_order_page", delay=1000, action = { Find = { selector="input[name='placeYourOrder1']", action="Click" }}, if_not_cond="place_order_frame"},
         { name="no_order_page", action = "End", if_not_cond="place_order_page"},
 
-        { name="verify_order", wait_max=2100, delay=1000, action = { MatchURL = "amazon.com/gp/buy/thankyou/"}},
+        { name="verify_order", wait_max=2100, delay=1000, action = { MatchUrl = "amazon.com/gp/buy/thankyou/"}},
     ]},
 
     # { name = "test", steps = [

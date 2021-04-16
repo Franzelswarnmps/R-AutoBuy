@@ -24,12 +24,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         for (index,group) in config.groups.iter().enumerate() {
 
-            match browser.switch_tab(index).await {
-                Err(err) => {
-                    println!("Group [{}] tab switch error {}, restarting", group.name, err);
-                    browser.restart().await?;
-                },
-                _ => {}
+            if let Err(err) = browser.switch_tab(index).await {
+                println!("Group [{}] tab switch error {}, restarting", group.name, err);
+                browser.restart().await?;
             }
 
             // decide whether to continue looping over groups

@@ -36,7 +36,7 @@ pub enum StepAction {
         anti_cache: bool,
     },
     Wait(u64),
-    MatchURL(String),
+    MatchUrl(String),
     Screenshot,
     TopWindow,
     Find{

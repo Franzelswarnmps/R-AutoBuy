@@ -10,31 +10,28 @@ pub async fn process_group(group: &Group, browser: &mut Browser) -> Result<(), B
     let mut failed: HashSet<String> = HashSet::new();
 
     for step in &group.steps {
-        if (step.if_cond == "" && step.if_not_cond == "")
-        || (step.if_cond != "" && success.contains(&step.if_cond))
-        || (step.if_not_cond != "" && failed.contains(&step.if_not_cond)) {
+        if (step.if_cond.is_empty() && step.if_not_cond.is_empty())
+        || (!step.if_cond.is_empty() && success.contains(&step.if_cond))
+        || (!step.if_not_cond.is_empty() && failed.contains(&step.if_not_cond)) {
 
             match process_step(step, browser).await {
                 Err(err) => {
                     log(format!("Step [{}:{}] failed", group.name,step.name ),&step.logging);
                     if !step.optional {
                         if step.logging {
-                            match browser.screenshot().await {
-                                Err(err) => {
-                                    log(format!("Step [{}:{}] {}", group.name,step.name, err),&step.logging);
-                                },
-                                _ => {}
+                            if let Err(err) = browser.screenshot().await {
+                                log(format!("Step [{}:{}] {}", group.name,step.name, err),&step.logging);
                             }
                         }
                         return Err(err);
                     }
-                    if step.name != "" {
+                    if !step.name.is_empty() {
                         failed.insert(step.name.clone());
                     }
                 },
                 Ok(_) => {
                     log(format!("Step [{}:{}] success", group.name,step.name ),&step.logging);
-                    if step.name != "" {
+                    if !step.name.is_empty() {
                         success.insert(step.name.clone());
                     }
                 },

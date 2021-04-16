@@ -6,13 +6,13 @@ use tokio::time::timeout;
 use fantoccini::{Client, Locator, Element};
 
 // crate-wide errors to wrap browser operation results and handle timeouts
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum BrowserOutcome {
     // normal errors, continue
     NoSuchElement(fantoccini::error::CmdError),
     EarlyEnd,
     Screenshot(String),
-    MatchURLFail(String),
+    MatchUrlFail(String),
 
     // try restarting
     Timeout(tokio::time::Elapsed),
@@ -20,6 +20,8 @@ pub enum BrowserOutcome {
     ClientLost,
     ReCaptchaIssue(String),
 }
+
+impl Error for BrowserOutcome {}
 
 impl std::fmt::Display for BrowserOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -30,15 +32,17 @@ impl std::fmt::Display for BrowserOutcome {
             BrowserOutcome::EarlyEnd => {write!(f, "Manual end by step")},
             BrowserOutcome::ClientLost => {write!(f, "Client lost")},
             BrowserOutcome::Screenshot(name) => {write!(f, "Failed to take screenshot: ({})",name)},
-            BrowserOutcome::MatchURLFail(name) => {write!(f, "Failed to match url: ({})",name)},
+            BrowserOutcome::MatchUrlFail(name) => {write!(f, "Failed to match url: ({})",name)},
             BrowserOutcome::ReCaptchaIssue(issue) => {write!(f, "ReCaptcha issue: ({})",issue)},
         }
     }
 }
 
 // there's an exposed API for switching tabs, this error is for that very specific case
-#[derive(Debug, Error)]
+#[derive(Debug)]
 struct TabDoesNotExist;
+
+impl Error for TabDoesNotExist {}
 
 impl std::fmt::Display for TabDoesNotExist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -70,10 +74,10 @@ impl Browser {
         let mut browser = Browser {
             //client: Client::new("http://localhost:4444").await?,
             client: Some(Browser::new_client(profile,marionette_port).await?),
-            timeout: timeout,
+            timeout,
             profile: profile.clone(),
             screenshot_path: screenshot_path.clone(),
-            marionette_port: marionette_port.clone(),
+            marionette_port,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::SystemTime::UNIX_EPOCH)
                 .unwrap()
@@ -156,7 +160,7 @@ impl Browser {
                             no_elem @ fantoccini::error::CmdError::NoSuchElement(_) => {
                                 Err(BrowserOutcome::NoSuchElement(no_elem))
                             },
-                            any @ _ => {
+                            any => {
                                 Err(BrowserOutcome::Unexpected(any))
                             }
                         }

@@ -22,8 +22,11 @@ is aimed at the amazon use-case.
 with "Remember me" checked on this profile
 * On the profile, set a specific marionette port, set browser.cache.check_doc_frequency = 1
 * In sites.toml, insert the Firefox profile path, and the marionette port
-you chose, change the product url, and comment/uncomment the recaptcha step
-depending on whether you installed Python3 and amazoncaptcha
+you chose, change the product url
+* If you plan on using the amazon captcha solver, you must install Poython before compiling
+    * uncomment the captcha step in sites.toml
+    * uncomment the pyo3 dependency
+    * uncomment the SolveAmazonReCaptcha step in step.rs
 * Place the geckodriver.exe in the root of the repo
 * cargo run
 
@@ -35,6 +38,7 @@ will cause an unrecoverable error.
 
 # Todo
 * Add a config field for geckodriver executable location
+* Add a feature flag so users don't have to uncomment captcha code
 
 # Configuration
 You will probably want to change the product url if you're using this to buy
